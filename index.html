@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PnR Interactive Demo</title>
+    <style>
+   /* Add these new styles and modify existing ones */
+.pnr-object {
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: border-color 0.3s ease;
+}
+
+/* Product panel styling */
+#product-display .pnr-object {
+    border-color: #93c5fd;  /* Light blue */
+}
+
+#product-display .pnr-object:hover {
+    border-color: #60a5fa;  /* Slightly darker blue */
+}
+
+#product-display .pnr-visual {
+    background: #f0f7ff;  /* Very light blue background */
+}
+
+/* User preferences panel styling */
+#user-preferences .pnr-object {
+    border-color: #86efac;  /* Light green */
+}
+
+#user-preferences .pnr-object:hover {
+    border-color: #4ade80;  /* Slightly darker green */
+}
+
+#user-preferences .pnr-visual {
+    background: #f0fdf4;  /* Very light green background */
+}
+
+/* Input field enhancements */
+.pnr-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pnr-input:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+}
+
+/* State panel styling */
+.state-panel {
+    border: 2px solid #f3f4f6;
+    border-radius: 12px;
+    transition: border-color 0.3s ease;
+}
+
+.state-panel:hover {
+    border-color: #d1d5db;
+}
+
+/* Add some spacing and style to the title */
+h1 {
+    color: #1f2937;
+    margin-bottom: 0.5em;
+}
+
+p {
+    color: #6b7280;
+    margin-bottom: 2em;
+}
+
+/* Reset button enhancement */
+.btn-reset {
+    padding: 8px 16px;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #991b1b;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.btn-reset:hover {
+    background: #fecaca;
+    border-color: #fca5a5;
+}
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .pnr-object {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .pnr-visual {
+        padding: 20px;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .pnr-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+    }
+
+    .pnr-content.expanded {
+        max-height: 500px;
+    }
+
+    .pnr-form {
+        padding: 20px;
+    }
+
+    .pnr-group {
+        margin-bottom: 15px;
+        position: relative;
+    }
+
+    .pnr-prompt {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .pnr-value {
+        padding: 8px;
+        background: #f3f4f6;
+        border-radius: 4px;
+        color: #1f2937;
+    }
+
+    .pnr-input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+    .state-panel {
+        margin-top: 30px;
+        padding: 20px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+    }
+
+    .state-panel.collapsed #state-display {
+        display: none;
+    }
+
+    .modified::after {
+        content: '•';
+        position: absolute;
+        right: -12px;
+        top: 0;
+        color: #3b82f6;
+        font-size: 20px;
+    }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PnR Interactive Demo</h1>
+        <p>Click on each panel to expand and interact with PnRs</p>
+
+        <div class="grid">
+            <div id="product-display"></div>
+            <div id="user-preferences"></div>
+        </div>
+
+        <div id="state-panel" class="state-panel collapsed">
+            <div class="state-panel-header">
+                <h3>Application State (click to toggle)</h3>
+                <button id="resetButton">Reset to Initial State</button>
+            </div>
+            <pre id="state-display"></pre>
+        </div>
+    </div>
+
+<script>
+// PnR State Manager remains the same
+class PnRStateManager {
+    constructor() {
+        this.state = new Map();
+        this.initialState = new Map();
+        this.listeners = new Set();
+    }
+
+    registerPnR(id, value, metadata = {}) {
+        const pnrState = {
+            value,
+            metadata,
+            timestamp: Date.now()
+        };
+        this.initialState.set(id, {...pnrState});
+        this.state.set(id, {...pnrState});
+        
+        if (id.startsWith('product.')) {
+            this.notifyListeners();
+        }
+    }
+
+    updatePnR(id, value) {
+        if (this.state.has(id)) {
+            const pnr = this.state.get(id);
+            pnr.value = value;
+            pnr.timestamp = Date.now();
+            this.notifyListeners();
+            return true;
+        }
+        return false;
+    }
+
+    getPnR(id) {
+        return this.state.get(id);
+    }
+
+    reset() {
+        this.initialState.forEach((value, key) => {
+            this.state.set(key, {...value, timestamp: Date.now()});
+        });
+        this.notifyListeners();
+    }
+
+    addListener(callback) {
+        this.listeners.add(callback);
+    }
+
+    notifyListeners() {
+        this.listeners.forEach(callback => callback(this.state));
+    }
+}
+
+// Define PnR sets
+const productPnRs = [
+    {
+        id: 'product.name',
+        prompt: "Product Name",
+        value: "Premium Headphones",
+        metadata: { type: 'display', category: 'product' }
+    },
+    {
+        id: 'product.description',
+        prompt: "Description",
+        value: "High-fidelity wireless headphones with noise cancellation",
+        metadata: { type: 'display', category: 'product' }
+    },
+    {
+        id: 'product.price',
+        prompt: "Price",
+        value: "$299.99",
+        metadata: { type: 'display', category: 'product' }
+    }
+];
+
+const userPnRs = [
+    {
+        id: 'user.color_preference',
+        prompt: "Preferred Color",
+        value: "",
+        metadata: {
+            type: 'edit',
+            category: 'preferences',
+            validation: {
+                required: true,
+                options: ["Black", "Silver", "Rose Gold"]
+            }
+        }
+    },
+    {
+        id: 'user.delivery_address',
+        prompt: "Delivery Address",
+        value: "",
+        metadata: {
+            type: 'edit',
+            category: 'preferences',
+            validation: {
+                required: true,
+                minLength: 10
+            }
+        }
+    },
+    {
+        id: 'user.special_instructions',
+        prompt: "Special Instructions",
+        value: "",
+        metadata: {
+            type: 'edit',
+            category: 'preferences'
+        }
+    }
+];
+
+// Modified PnRObject class with improved input handling
+class PnRObject {
+    constructor(container, pnrs, stateManager, options = {}) {
+        this.container = container;
+        this.pnrs = pnrs;
+        this.stateManager = stateManager;
+        this.options = options;
+        this.expanded = false;
+        this.init();
+    }
+
+    init() {
+        this.pnrs.forEach(pnr => {
+            this.stateManager.registerPnR(pnr.id, pnr.value, pnr.metadata);
+        });
+        this.render();
+        this.setupListeners();
+    }
+
+    render() {
+        const isReadOnly = this.pnrs[0]?.metadata.type === 'display';
+        
+        this.container.innerHTML = `
+            <div class="pnr-object">
+                <div class="pnr-visual">
+                    <div>
+                        <h3 style="margin: 0">${this.options.title}</h3>
+                        <p style="margin: 5px 0 0; font-size: 14px; color: #6b7280">
+                            ${isReadOnly ? 'View product details' : 'Customize your preferences'}
+                        </p>
+                    </div>
+                    <span class="expand-indicator">▼</span>
+                </div>
+                <div class="pnr-content ${this.expanded ? 'expanded' : ''}">
+                    <div class="pnr-form">
+                        ${this.pnrs.map(pnr => {
+                            const currentState = this.stateManager.getPnR(pnr.id);
+                            const initialState = this.stateManager.initialState.get(pnr.id);
+                            const isModified = currentState.value !== initialState.value;
+                            
+                            return `
+                                <div class="pnr-group ${isModified ? 'modified' : ''}" data-pnr-id="${pnr.id}">
+                                    <label class="pnr-prompt">${pnr.prompt}</label>
+                                    ${isReadOnly ? 
+                                        `<div class="pnr-value">${currentState.value}</div>` :
+                                        `<input 
+                                            type="text" 
+                                            class="pnr-input"
+                                            value="${currentState.value}"
+                                            placeholder="${pnr.metadata.validation?.required ? 'Required' : 'Optional'}"
+                                            data-pnr-id="${pnr.id}"
+                                        >`
+                                    }
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    setupListeners() {
+        const visual = this.container.querySelector('.pnr-visual');
+        const content = this.container.querySelector('.pnr-content');
+        const form = this.container.querySelector('.pnr-form');
+
+        visual.addEventListener('click', (e) => {
+            this.expanded = !this.expanded;
+            content.classList.toggle('expanded');
+            if (!this.expanded) {
+                updateStateDisplay();
+            }
+        });
+
+        if (this.pnrs[0]?.metadata.type === 'edit') {
+            form.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            form.addEventListener('input', (e) => {
+                if (e.target.classList.contains('pnr-input')) {
+                    const pnrId = e.target.dataset.pnrId;
+                    this.stateManager.updatePnR(pnrId, e.target.value);
+                    
+                    // Only update the modification indicator
+                    const group = e.target.closest('.pnr-group');
+                    const currentState = this.stateManager.getPnR(pnrId);
+                    const initialState = this.stateManager.initialState.get(pnrId);
+                    const isModified = currentState.value !== initialState.value;
+                    
+                    group.classList.toggle('modified', isModified);
+                }
+            });
+        }
+    }
+}
+
+// Initialize Application
+const stateManager = new PnRStateManager();
+
+// Create components
+new PnRObject(
+    document.getElementById('product-display'),
+    productPnRs,
+    stateManager,
+    { title: 'Product Details' }
+);
+
+new PnRObject(
+    document.getElementById('user-preferences'),
+    userPnRs,
+    stateManager,
+    { title: 'User Preferences' }
+);
+
+// Setup state panel
+const statePanel = document.getElementById('state-panel');
+statePanel.addEventListener('click', (e) => {
+    if (e.target.id !== 'resetButton') {
+        statePanel.classList.toggle('collapsed');
+    }
+});
+
+function updateStateDisplay() {
+    const stateDisplay = document.getElementById('state-display');
+    const displayData = Array.from(stateManager.state.entries())
+        .reduce((acc, [key, value]) => ({...acc, [key]: value}), {});
+    stateDisplay.textContent = JSON.stringify(displayData, null, 2);
+}
+
+// Reset functionality
+document.getElementById('resetButton').addEventListener('click', (e) => {
+    e.stopPropagation();
+    stateManager.reset();
+    
+    // Re-create components
+    new PnRObject(
+        document.getElementById('product-display'),
+        productPnRs,
+        stateManager,
+        { title: 'Product Details' }
+    );
+    
+    new PnRObject(
+        document.getElementById('user-preferences'),
+        userPnRs,
+        stateManager,
+        { title: 'User Preferences' }
+    );
+    
+    updateStateDisplay();
+});
+
+// Initial state display setup
+updateStateDisplay();
+</script>
+</body>
+</html>
