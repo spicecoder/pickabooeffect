@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid Lookout Visual Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f0f2f5;
+        }
+
+        .grid-lookout-container {
+            position: relative;
+            width: 100%;
+            height: 80vh;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .grid-cell {
+            position: absolute;
+            border: 1px dashed rgba(0,0,0,0.1);
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .grid-lookout-object {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        .grid-lookout-object:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }
+
+        .object-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .object-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+
+        .object-title {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .object-description {
+            margin: 0;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button onclick="toggleGrid()">Toggle Grid</button>
+        <button onclick="addRandomObject()">Add Object</button>
+    </div>
+    <div id="grid-lookout-container" class="grid-lookout-container"></div>
+
+<script>
+class GridLookoutSystem {
+    constructor(container, config = {}) {
+        this.container = container;
+        this.config = {
+            layers: config.layers || 3,
+            baseRows: config.baseRows || 4,
+            baseColumns: config.baseColumns || 4,
+            cellAspectRatio: config.cellAspectRatio || 1
+        };
+        
+        this.layers = new Map();
+        for (let i = 0; i < this.config.layers; i++) {
+            this.layers.set(i, {
+                rows: this.config.baseRows,
+                columns: this.config.baseColumns
+            });
+        }
+        
+        this.objects = new Map();
+        this.setupGrid();
+        this.setupResizeHandler();
+        this.popup = {
+            element: null,
+            currentObject: null
+        };
+        this.setupPopupContainer();
+    }
+    setupPopupContainer() {
+        // Create reusable popup container
+        const popup = document.createElement('div');
+        popup.className = 'grid-lookout-popup';
+        popup.style.display = 'none';
+        document.body.appendChild(popup);
+        
+        // Add backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'grid-lookout-backdrop';
+        backdrop.addEventListener('click', () => this.hidePopup());
+        document.body.appendChild(backdrop);
+        
+        this.popup.element = popup;
+        this.popup.backdrop = backdrop;
+    }
+
+    showPopup(object) {
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        this.popup.element.style.width = `${viewportWidth * 0.6}px`;
+        this.popup.element.style.height = `${viewportHeight * 0.6}px`;
+        this.popup.element.style.display = 'block';
+        this.popup.backdrop.style.display = 'block';
+        this.popup.currentObject = object;
+        
+        // Render object's PnR state
+        this.renderPopupContent(object);
+    }
+
+    hidePopup() {
+        this.popup.element.style.display = 'none';
+        this.popup.backdrop.style.display = 'none';
+        this.popup.currentObject = null;
+    }
+
+    setupGrid() {
+        this.container.innerHTML = '';
+        const containerRect = this.container.getBoundingClientRect();
+        
+        this.layers.forEach((layer, layerIndex) => {
+            const cellWidth = containerRect.width / layer.columns;
+            const cellHeight = containerRect.height / layer.rows;
+            
+            for (let row = 0; row < layer.rows; row++) {
+                for (let col = 0; col < layer.columns; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.style.width = `${cellWidth}px`;
+                    cell.style.height = `${cellHeight}px`;
+                    cell.style.left = `${col * cellWidth}px`;
+                    cell.style.top = `${row * cellHeight}px`;
+                    cell.style.opacity = layerIndex === 0 ? 0.2 : 0;
+                    this.container.appendChild(cell);
+                }
+            }
+        });
+    }
+
+    setupResizeHandler() {
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this.setupGrid();
+                this.updateAllObjectPositions();
+            }, 250);
+        });
+    }
+
+    calculatePosition(coordinates) {
+        const { layer, row, column } = coordinates;
+        const layerConfig = this.layers.get(layer);
+        const containerRect = this.container.getBoundingClientRect();
+        
+        const cellWidth = containerRect.width / layerConfig.columns;
+        const cellHeight = containerRect.height / layerConfig.rows;
+        
+        return {
+            x: column * cellWidth,
+            y: row * cellHeight,
+            width: cellWidth * 1.5,
+            height: cellHeight * 1.5
+        };
+    }
+
+    addObject(object, initialCoordinates) {
+        const element = document.createElement('div');
+        element.className = 'grid-lookout-object';
+        element.innerHTML = object.content;
+        
+        const position = this.calculatePosition(initialCoordinates);
+        
+        element.style.transform = `translate(${position.x}px, ${position.y}px)`;
+        element.style.width = `${position.width}px`;
+        element.style.height = `${position.height}px`;
+        element.dataset.layer = initialCoordinates.layer;
+        
+        this.container.appendChild(element);
+        
+        this.objects.set(object.id, {
+            element,
+            coordinates: initialCoordinates,
+            data: object
+        });
+
+        element.addEventListener('click', () => {
+            const newLayer = element.dataset.layer === '0' ? 1 : 0;
+            this.updateObjectPosition(object.id, {
+                ...initialCoordinates,
+                layer: newLayer
+            });
+        });
+        // element.addEventListener('click', () => {
+        //     if (element.dataset.layer === '1') {
+        //         this.showPopup(object);
+        //     }
+        // });
+        
+        return element;
+    }
+
+    updateObjectPosition(objectId, newCoordinates) {
+        const object = this.objects.get(objectId);
+        if (!object) return;
+        
+        const position = this.calculatePosition(newCoordinates);
+        object.element.style.transform = `translate(${position.x}px, ${position.y}px)`;
+        object.element.dataset.layer = newCoordinates.layer;
+        object.coordinates = newCoordinates;
+    }
+
+    updateAllObjectPositions() {
+        this.objects.forEach((object, id) => {
+            this.updateObjectPosition(id, object.coordinates);
+        });
+    }
+}
+
+// Initialize the system
+const gridSystem = new GridLookoutSystem(document.getElementById('grid-lookout-container'), {
+    layers: 2,
+    baseRows: 3,
+    baseColumns: 3
+});
+
+// Sample data for objects
+const sampleObjects = [
+    {
+        title: "Mountain View",
+        description: "Beautiful landscape",
+        imageUrl: "/api/placeholder/400/300"
+    },
+    {
+        title: "City Lights",
+        description: "Urban nightscape",
+        imageUrl: "/api/placeholder/400/300"
+    },
+    {
+        title: "Ocean Waves",
+        description: "Serene seascape",
+        imageUrl: "/api/placeholder/400/300"
+    }
+];
+
+let objectCounter = 0;
+
+function addRandomObject() {
+    const sample = sampleObjects[Math.floor(Math.random() * sampleObjects.length)];
+    const row = Math.floor(Math.random() * 3);
+    const column = Math.floor(Math.random() * 3);
+    
+    gridSystem.addObject({
+        id: `object-${++objectCounter}`,
+        content: `
+            <div class="object-content">
+                <img src="${sample.imageUrl}" alt="${sample.title}" class="object-image">
+                <h3 class="object-title">${sample.title}</h3>
+                <p class="object-description">${sample.description}</p>
+            </div>
+        `
+    }, { layer: 0, row, column });
+}
+
+function toggleGrid() {
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        cell.style.opacity = cell.style.opacity === '0' ? '0.2' : '0';
+    });
+}
+
+// Add initial objects
+addRandomObject();
+addRandomObject();
+</script>
+</body>
+</html>
