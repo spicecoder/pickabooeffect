@@ -1,0 +1,4 @@
+https://claude.ai/chat/7ca6478b-0272-40a1-8791-dbf57576e90a    PnR Computing
+
+Generating Valid Design Node Sequences Using Matrix Operations
+
